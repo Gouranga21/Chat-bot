@@ -1,12 +1,12 @@
 {
   "name": "chat-bot",
   "version": "1.0.0",
+  "description": "Messenger group chat bot",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@xaviabot/fca-unofficial": "^1.4.0"
+    "@xaviabot/fca-unofficial": "^1.2.0"
   }
 }

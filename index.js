@@ -1,58 +1,76 @@
-const login = require("facebook-chat-api");
-const fs = require("fs");
-const yts = require("yt-search");
+const login = require('facebook-chat-api');
+const fs = require('fs');
+const axios = require('axios');
 
-const appState = JSON.parse(fs.readFileSync("fbstate.json", "utf8"));
-const replies = JSON.parse(fs.readFileSync("replies.json", "utf8"));
-let songs = JSON.parse(fs.readFileSync("songs.json", "utf8"));
+// fbstate.json থেকে লগইন ইনফো লোড
+const appState = require('./fbstate.json');
+
+// replies.json থেকে টার্গেট মেসেজ ও রিপ্লাই লোড
+const replies = require('./replies.json');
+
+// গান খুঁজে রাখা জন্য অস্থায়ী স্টোর
+let songSearchResults = {};
 
 login({ appState }, (err, api) => {
-  if (err) return console.error("Login failed:", err);
+    if (err) return console.error("❌ Login failed:", err);
 
-  console.log("✅ Bot logged in!");
-  api.setOptions({ listenEvents: true });
+    console.log("✅ Bot is now running...");
 
-  api.listenMqtt(async (err, event) => {
-    if (err) return console.error(err);
-    if (event.type !== "message" || !event.body) return;
+    api.listenMqtt((err, message) => {
+        if (err || !message || !message.body) return;
 
-    const msg = event.body.trim().toLowerCase();
-    const threadID = event.threadID;
+        const body = message.body.toLowerCase();
+        const threadID = message.threadID;
 
-    // Song search trigger
-    if (msg.startsWith("/song ")) {
-      const query = msg.replace("/song ", "");
-      const result = await yts(query);
-      const videos = result.videos.slice(0, 5);
+        // 🔁 সাধারণ টার্গেট রেসপন্স
+        for (const target in replies) {
+            if (body.startsWith(target.toLowerCase())) {
+                api.sendMessage(replies[target], threadID);
+                return;
+            }
+        }
 
-      if (videos.length === 0) {
-        return api.sendMessage("😢 No results found.", threadID);
-      }
+        // 🎵 /song গান অনুসন্ধান
+        if (body.startsWith("/song ")) {
+            const query = encodeURIComponent(body.replace("/song ", ""));
+            const apiUrl = `https://saavn.dev/api/search/songs?query=${query}`;
 
-      songs[threadID] = videos;
-      fs.writeFileSync("songs.json", JSON.stringify(songs, null, 2));
+            axios.get(apiUrl).then(res => {
+                const results = res.data.data.results.slice(0, 5);
+                if (results.length === 0) {
+                    api.sendMessage("❌ কোনো গান খুঁজে পাওয়া যায়নি।", threadID);
+                    return;
+                }
 
-      let message = "🎵 Songs found:\n\n";
-      videos.forEach((v, i) => {
-        message += `${i + 1}. ${v.title} (${v.timestamp})\n`;
-      });
-      message += "\n📥 Reply with number (1-5) to receive the audio.";
+                // স্টোর করে রাখা
+                songSearchResults[threadID] = results;
 
-      return api.sendMessage(message, threadID);
-    }
+                let response = "🎵 গান পাওয়া গেছে:\n\n";
+                results.forEach((song, index) => {
+                    response += `${index + 1}. ${song.name} - ${song.primaryArtists}\n🕒 ${song.duration} seconds\n\n`;
+                });
+                response += "যে গানটি চাও তার নাম্বার reply করো। (যেমন: 1)";
 
-    // Song selection
-    if (songs[threadID] && /^[1-5]$/.test(msg)) {
-      const index = parseInt(msg) - 1;
-      const song = songs[threadID][index];
-      if (!song) return;
+                api.sendMessage(response, threadID);
+            }).catch(() => {
+                api.sendMessage("❌ গান খোঁজার সময় সমস্যা হয়েছে।", threadID);
+            });
 
-      api.sendMessage(`🎧 You selected: ${song.title} (${song.timestamp})\nDownload manually:\nhttps://www.youtube.com/watch?v=${song.videoId}`, threadID);
-    }
+        } else if (/^[1-5]$/.test(body) && songSearchResults[threadID]) {
+            // 🎧 ইউজার গান নির্বাচন করলে
+            const index = parseInt(body) - 1;
+            const song = songSearchResults[threadID][index];
+            if (!song) {
+                api.sendMessage("❌ এই নাম্বারে কোনো গান খুঁজে পাওয়া যায়নি।", threadID);
+                return;
+            }
 
-    // Simple replies from replies.json
-    if (replies[msg]) {
-      return api.sendMessage(replies[msg], threadID);
-    }
-  });
+            api.sendMessage({
+                body: `🎧 ${song.name}\nBy: ${song.primaryArtists}`,
+                attachment: axios.get(song.downloadUrl[4].link, { responseType: 'stream' }).then(res => res.data)
+            }, threadID);
+
+            delete songSearchResults[threadID]; // একবার পাঠানো হলে মুছে দাও
+        }
+    });
 });

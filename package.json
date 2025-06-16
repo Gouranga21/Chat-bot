@@ -1,13 +1,12 @@
 {
-  "name": "my-messenger-bot",
+  "name": "chat-bot",
   "version": "1.0.0",
-  "description": "Simple Messenger Bot using fb-chat-api",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@xaviabot/fb-chat-api": "^1.2.0",
-    "axios": "^1.6.8"
+    "@xaviabot/fca-unofficial": "^1.4.0"
   }
 }

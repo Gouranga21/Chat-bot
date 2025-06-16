@@ -1,0 +1,14 @@
+[
+  {
+    "key": "c_user",
+    "value": "your_c_user",
+    "domain": "facebook.com",
+    "path": "/"
+  },
+  {
+    "key": "xs",
+    "value": "your_xs_token",
+    "domain": "facebook.com",
+    "path": "/"
+  }
+]
